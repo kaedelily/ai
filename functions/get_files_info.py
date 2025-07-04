@@ -39,4 +39,3 @@ schema_get_files_info = types.FunctionDeclaration(
         },
     ),
 )
-
