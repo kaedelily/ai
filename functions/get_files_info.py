@@ -1,5 +1,5 @@
 import os
-import types
+from google.genai import types
 
 
 def get_files_info(working_directory, directory=None):
@@ -25,6 +25,7 @@ def get_files_info(working_directory, directory=None):
     except Exception as e:
         return f"Error listing files: {e}"
 
+
 schema_get_files_info = types.FunctionDeclaration(
     name="get_files_info",
     description="Lists files in the specified directory along with their sizes, constrained to the working directory.",
@@ -38,3 +39,4 @@ schema_get_files_info = types.FunctionDeclaration(
         },
     ),
 )
+

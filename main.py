@@ -1,61 +1,58 @@
-import os
-from dotenv import load_dotenv
-from google import genai
 import sys
+import os
+from google import genai
 from google.genai import types
-from functions.get_files_info import schema_get_files_info
+from dotenv import load_dotenv
 
-load_dotenv()
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("GEMINI_API_KEY is not set in the environment variables.")
-client = genai.Client(api_key=api_key)
+from prompts import system_prompt
+from call_function import available_functions
 
-if len(sys.argv) < 2:
-    print("No input provided. Please provide a prompt as a command line argument.")
-    exit(1)
 
-user_prompt = sys.argv[1]
-available_functions = types.Tool(
-    function_declarations=[
-        schema_get_files_info,
+def main():
+    load_dotenv()
+
+    verbose = "--verbose" in sys.argv
+    args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
+
+    if not args:
+        print("AI Code Assistant")
+        print('\nUsage: python main.py "your prompt here" [--verbose]')
+        print('Example: python main.py "How do I fix the calculator?"')
+        sys.exit(1)
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
+
+    user_prompt = " ".join(args)
+
+    if verbose:
+        print(f"User prompt: {user_prompt}\n")
+
+    messages = [
+        types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
-)
-config=types.GenerateContentConfig(
-    tools=[available_functions], system_instruction=system_prompt
-)
-system_prompt = """
-You are a helpful AI coding agent.
 
-When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
+    generate_content(client, messages, verbose)
 
-- List files and directories
 
-All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
-"""
+def generate_content(client, messages, verbose):
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-001",
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions], system_instruction=system_prompt
+        ),
+    )
+    if verbose:
+        print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+        print("Response tokens:", response.usage_metadata.candidates_token_count)
 
-messages = [
-    types.Content(role="user", parts=[types.Part(text=user_prompt)]),
-]
+    if not response.function_calls:
+        return response.text
 
-response = client.models.generate_content(
-    model='gemini-2.0-flash-001', contents=system_prompt
-)
-if response.candidates:
-    for candidate in response.candidates:
-        if hasattr(candidate, 'content') and candidate.content and hasattr(candidate.content, 'parts'):
-            for part in candidate.content.parts:
-                if hasattr(part, 'function_call') and part.function_call:
-                    function_call_part = part.function_call
-                    print(f"Calling function: {function_call_part.name}({function_call_part.args})")
-                elif hasattr(part, 'text') and part.text:
-                    print(response.text)
-     
-if "--verbose" in sys.argv:
-    if response.usage_metadata:
-            print(response.text)
-            print(f"User prompt: {user_prompt}")
-            print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-            print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
-else:
-    print(response.text)
+    for function_call_part in response.function_calls:
+        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+
+
+if __name__ == "__main__":
+    main()
